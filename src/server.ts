@@ -45,10 +45,53 @@ export interface ServerOptions {
     port?: number;
 }
 
+
+/**
+ * A connection to a client.
+ */
+export class ClientConnection implements vscode.Disposable {
+    /**
+     * Stores the underlying client object.
+     */
+    protected readonly _CLIENT: any;
+    
+    /**
+     * Initializes a new instance of that class.
+     * 
+     * @param {any} client The underlying client object.
+     */
+    constructor(client: any) {
+        this._CLIENT = client;
+    }
+
+    /**
+     * Gets the underlying client object.
+     */
+    public get client(): any {
+        return this._CLIENT;
+    }
+
+    /**
+     * Closes the connection to the client.
+     */
+    public close() {
+        this.client.destroy();
+    }
+
+    /** @inheritdoc */
+    public dispose() {
+        this.close();
+    }
+}
+
 /**
  * A XMPP server.
  */
 export class XMPPServer extends Events.EventEmitter implements vscode.Disposable {
+    /**
+     * Stores the current client connections.
+     */
+    protected _connections: ClientConnection[];
     /**
      * Stores the underlying controller.
      */
@@ -80,26 +123,6 @@ export class XMPPServer extends Events.EventEmitter implements vscode.Disposable
         return this._CONTROLLER;
     }
 
-    /**
-     * Disconnects a client connection.
-     * 
-     * @param {any} connection The connection to close.
-     * 
-     * @return {boolean} Operation was successful or not.
-     */
-    protected disconnectClient(connection: any): boolean {
-        try {
-            if (connection) {
-                connection.destroy();
-            }
-
-            return true;
-        }
-        catch (e) {
-            return false;
-        }
-    }
-
     /** @inheritdoc */
     public dispose() {
         this.stopSync();
@@ -108,7 +131,7 @@ export class XMPPServer extends Events.EventEmitter implements vscode.Disposable
     /**
      * Starts the server.
      * 
-     * @param {ServerOptions} The options.
+     * @param {ServerOptions} [opts] The options.
      * 
      * @return {Thenable<boolean>} The promise.
      */
@@ -150,12 +173,14 @@ export class XMPPServer extends Events.EventEmitter implements vscode.Disposable
                             return;
                         }
 
+                        let conn = new ClientConnection(client);
+
                         client.on('register', function (opts, cb) {
                             try {
-                                cb(true);
+                                cb(false);
                             }
                             catch (e) {
-                                //TODO: log
+                                me.controller.log(`[ERROR] XMPPServer.start().register: ${chat_helpers.toStringSafe(e)}`);
                             }
                         });
 
@@ -169,16 +194,16 @@ export class XMPPServer extends Events.EventEmitter implements vscode.Disposable
                                 }
                             }
                             catch (e) {
-                                //TODO: log
+                                me.controller.log(`[ERROR] XMPPServer.start().authenticate: ${chat_helpers.toStringSafe(e)}`);
                             }
                         });
 
                         client.on('online', function () {
                             try {
-                                // console.log('server:', client.jid.local, 'ONLINE');
+                                me._connections.push(conn);
                             }
                             catch (e) {
-                                //TODO: log
+                                me.controller.log(`[ERROR] XMPPServer.start().online: ${chat_helpers.toStringSafe(e)}`);
                             }
                         });
 
@@ -191,34 +216,40 @@ export class XMPPServer extends Events.EventEmitter implements vscode.Disposable
                                 stanza.attrs.to = from;
 
                                 client.send(stanza); */
+
+                                //TODO
+
+                                if (stanza) {
+
+                                }
                             }
                             catch (e) {
-                                //TODO: log
+                                me.controller.log(`[ERROR] XMPPServer.start().stanza: ${chat_helpers.toStringSafe(e)}`);
                             }
                         });
 
                         client.on('close', function () {
                             try {
-                                me.disconnectClient(client);
+                                conn.close();
                             }
                             catch (e) {
-                                //TODO: log
+                                me.controller.log(`[ERROR] XMPPServer.start().close: ${chat_helpers.toStringSafe(e)}`);
                             }
                         });
 
                         client.on('error', function (err) {
                             try {
                                 if (err) {
-                                    //TODO: log
+                                    me.controller.log(`[ERROR] XMPPServer.start(3): ${chat_helpers.toStringSafe(err)}`);
                                 }
                             }
                             catch (e) {
-                                //TODO: log
+                                me.controller.log(`[ERROR] XMPPServer.start(2): ${chat_helpers.toStringSafe(e)}`);
                             }
                         });
                     }
                     catch (e) {
-                        me.controller.log(`[ERROR] XMPPServer.start(): ${chat_helpers.toStringSafe(e)}`);
+                        me.controller.log(`[ERROR] XMPPServer.start(1): ${chat_helpers.toStringSafe(e)}`);
                     }
                 });
 
@@ -227,6 +258,7 @@ export class XMPPServer extends Events.EventEmitter implements vscode.Disposable
                         completed(err);
                     }
                     else {
+                        me._connections = [];
                         me._server = newServer;
 
                         completed(null, true);
@@ -280,13 +312,14 @@ export class XMPPServer extends Events.EventEmitter implements vscode.Disposable
             }
 
             // close connections to clients
-            let allConnections: Set<any> = oldServer.connections;
+            let allConnections = oldServer._connections;
             if (allConnections) {
                 allConnections.forEach(c => {
-                    me.disconnectClient(c);
+                    c.close();
                 });
             }
 
+            me._connections = null;
             me._server = null;
         }
         finally {

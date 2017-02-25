@@ -30,9 +30,23 @@ import * as Events from 'events';
 import * as vscode from 'vscode';
 const XMPP = require('node-xmpp-server');
 
+
+/**
+ * Connection options.
+ */
 export interface ConnectionOptions {
-    jid?: string;
+    /**
+     * The domain.
+     */
+    domain?: string;
+    /**
+     * The password.
+     */
     password?: string;
+    /**
+     * The user name / ID.
+     */
+    user?: string;
 }
 
 /**
@@ -47,6 +61,10 @@ export class XMPPClient extends Events.EventEmitter implements vscode.Disposable
      * Stores the underlying controller.
      */
     protected readonly _CONTROLLER: chat_controller.Controller;
+    /**
+     * The underlying domain.
+     */
+    protected _domain;
 
     /**
      * Initializes a new instance of that class.
@@ -59,6 +77,11 @@ export class XMPPClient extends Events.EventEmitter implements vscode.Disposable
         this._CONTROLLER = controller;
     }
 
+    /**
+     * Closes the connection to the server.
+     * 
+     * @return Thenable<boolean> The promise.
+     */
     public close(): Thenable<boolean> {
         let me = this;
         
@@ -75,6 +98,11 @@ export class XMPPClient extends Events.EventEmitter implements vscode.Disposable
         });
     }
 
+    /**
+     * Closes the connection to the server.
+     * 
+     * @return boolean Connection has been closed or not.
+     */
     protected closeSync(): boolean {
         let me = this;
         
@@ -86,9 +114,18 @@ export class XMPPClient extends Events.EventEmitter implements vscode.Disposable
         oldClient.connection.socket.destroy();
 
         me._client = null;
+        me._domain = null;
+
         return true;
     }
 
+    /**
+     * Connects to a server.
+     * 
+     * @param {ConnectionOptions} [opts] The options.
+     * 
+     * @return {Thenable<boolean>} The promise.
+     */
     public connect(opts?: ConnectionOptions): Thenable<boolean> {
         let me = this;
 
@@ -105,49 +142,57 @@ export class XMPPClient extends Events.EventEmitter implements vscode.Disposable
                     return;
                 }
 
-                let jid = chat_helpers.toStringSafe(opts.jid);
-                if (chat_helpers.isEmptyString(jid)) {
-                    jid = me.controller.name + '@localhost';
+                let user = chat_helpers.toStringSafe(opts.user);
+                if (chat_helpers.isEmptyString(user)) {
+                    user = me.controller.name;
+                }
+
+                let domain = chat_helpers.toStringSafe(opts.domain);
+                if (chat_helpers.isEmptyString(domain)) {
+                    domain = 'localhost';
                 }
 
                 let password = chat_helpers.toStringSafe(opts.password);
 
                 let newClient = new Client({
-                    jid: jid,
+                    jid: `${user}@${domain}`,
                     password: password,
                 });
 
                 newClient.on('online', function () {
                     try {
-                        // newClient.send(new XMPP.Stanza('message', { to: 'localhost' }).c('body').t('HelloWorld'));
+                        me._domain = domain;
+                        me._client = newClient;
+
+                        completed(null, true);
                     }
                     catch (e) {
-                        //TODO: log
+                        me.controller.log(`[ERROR] XMPPClient.connect().online: ${chat_helpers.toStringSafe(e)}`);
                     }
                 });
 
                 newClient.on('stanza', function (stanza) {
                     try {
                         // console.log('client1: stanza', stanza.root().toString());
+                        if (stanza) {
+
+                        }
                     }
                     catch (e) {
-                        //TODO: log
+                        me.controller.log(`[ERROR] XMPPClient.connect().stanza: ${chat_helpers.toStringSafe(e)}`);
                     }
                 });
 
                 newClient.on('error', function (err) {
                     try {
                         if (err) {
-                            //TODO: log
+                            me.controller.log(`[ERROR] XMPPClient.connect(2): ${chat_helpers.toStringSafe(err)}`);
                         }
                     }
                     catch (e) {
-                        //TODO: log
+                        me.controller.log(`[ERROR] XMPPClient.connect(1): ${chat_helpers.toStringSafe(e)}`);
                     }
                 });
-
-                me._client = newClient;
-                completed(null, true);
             }
             catch (e) {
                 completed(e);
@@ -165,5 +210,35 @@ export class XMPPClient extends Events.EventEmitter implements vscode.Disposable
     /** @inheritdoc */
     public dispose() {
         this.closeSync();
+    }
+
+    /**
+     * Sends a message to the server.
+     * 
+     * @param {string} msg The message to send.
+     * 
+     * @return {Thenable<boolean>} The promise.
+     */
+    public sendMessage(msg: string): Thenable<boolean> {
+        let me = this;
+        
+        return new Promise<boolean>((resolve, reject) => {
+            let completed = chat_helpers.createSimplePromiseCompletedAction(resolve, reject);
+
+            try {
+                let client = me._client;
+
+                msg = chat_helpers.toStringSafe(msg);
+                
+                client.send(new XMPP.Stanza('message', { to: me._domain })
+                                    .c('body')
+                                    .t(msg));
+
+                completed(null, true);
+            }
+            catch (e) {
+                completed(e);
+            }
+        });
     }
 }
