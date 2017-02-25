@@ -23,7 +23,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+import * as chat_client from './client';
 import * as chat_contracts from './contracts';
+import * as chat_helpers from './helpers';
+import * as chat_server from './server';
+import * as Moment from 'moment';
+import * as OS from 'os';
 import * as vscode from 'vscode';
 
 
@@ -79,6 +84,29 @@ export class Controller implements vscode.Disposable {
 
     /** @inheritdoc */
     public dispose() {
+    }
+
+    /**
+     * Logs a message.
+     * 
+     * @param {any} msg The message to log.
+     * 
+     * @chainable
+     */
+    public log(msg: any): Controller {
+        let now = Moment();
+
+        this.outputChannel
+            .appendLine(`[${now.format('YYYY-MM-DD HH:mm:ss')}] ${chat_helpers.toStringSafe(msg)}`);
+
+        return this;
+    }
+
+    /**
+     * Gets the name of that machine.
+     */
+    public get name(): string {
+        return chat_helpers.normalizeString(OS.hostname());
     }
 
     /**

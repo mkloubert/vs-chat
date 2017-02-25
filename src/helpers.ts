@@ -61,6 +61,18 @@ export function createSimplePromiseCompletedAction<TResult>(resolve: (value?: TR
 }
 
 /**
+ * Checks if the string representation of a value is empty
+ * or contains whitespaces only.
+ * 
+ * @param {any} val The value to check.
+ * 
+ * @return {boolean} Is empty or not.
+ */
+export function isEmptyString(val: any): boolean {
+    return '' === toStringSafe(val).trim();
+}
+
+/**
  * Checks if a value is (null) or (undefined).
  * 
  * @param {any} val The value to check.
@@ -82,6 +94,22 @@ export function log(msg: any) {
 
     msg = toStringSafe(msg);
     console.log(`[vs-chat :: ${now.format('YYYY-MM-DD HH:mm:ss')}] => ${msg}`);
+}
+
+/**
+ * Normalizes a value as string so that is comparable.
+ * 
+ * @param {any} val The value to convert.
+ * @param {(str: string) => string} [normalizer] The custom normalizer.
+ * 
+ * @return {string} The normalized value.
+ */
+export function normalizeString(val: any, normalizer?: (str: string) => string): string {
+    if (!normalizer) {
+        normalizer = (str) => str.toLowerCase().trim();
+    }
+
+    return normalizer(toStringSafe(val));
 }
 
 /**

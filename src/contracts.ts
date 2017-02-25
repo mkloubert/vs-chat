@@ -23,6 +23,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+/**
+ * The default TCP port for an un-secure connection.
+ */
+export const DEFAULT_PORT = 5222;
 
 /**
  * The extension settings.
