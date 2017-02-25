@@ -1,8 +1,8 @@
 {
   "name": "vs-chat",
   "displayName": "Chat",
-  "description": "A XMPP (Jabber) chat client.",
-  "version": "0.0.1",
+  "description": "A XMPP (Jabber) based chat system.",
+  "version": "0.0.2",
   "publisher": "mkloubert",
   "engines": {
     "vscode": "^1.5.0"
@@ -15,7 +15,8 @@
     "Chat",
     "Jabber",
     "XMPP",
-    "Client"
+    "Client",
+    "Server"
   ],
   "activationEvents": [
     "*"
@@ -48,6 +49,7 @@
   },
   "readmeFilename": "README.md",
   "dependencies": {
-    "moment": "^2.17.1"
+    "moment": "^2.17.1",
+    "node-xmpp": "^1.0.8"
   }
 }
