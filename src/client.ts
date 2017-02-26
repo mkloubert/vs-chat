@@ -27,7 +27,7 @@ import * as chat_contracts from './contracts';
 import * as chat_controller from './controller';
 import * as chat_helpers from './helpers';
 import * as chat_objects from './objects';
-const Client = require('node-xmpp-client');
+import * as Client from 'node-xmpp-client';
 import * as Events from 'events';
 import * as vscode from 'vscode';
 const XMPP = require('node-xmpp-server');
@@ -118,13 +118,15 @@ export class XMPPClient extends chat_objects.StanzaHandlerBase {
         
         let oldClient = me._client;
         if (!oldClient) {
-            return false;
+            return false;  // no connection open
         }
 
         oldClient.connection.socket.destroy();
 
         me._client = null;
         me._domain = null;
+
+        me.emit('closed');
 
         return true;
     }
@@ -174,9 +176,9 @@ export class XMPPClient extends chat_objects.StanzaHandlerBase {
                     port = chat_contracts.DEFAULT_PORT;
                 }
 
-                let newClient = new Client({
+                let newClient = new Client.Client({
                     autostart: false,
-                    hort: host,
+                    host: host,
                     jid: `${user}@${domain}`,
                     password: password,
                     port: port,
@@ -194,7 +196,7 @@ export class XMPPClient extends chat_objects.StanzaHandlerBase {
                     }
                 });
 
-                newClient.on('stanza', function (stanza) {
+                newClient.on('stanza', function (stanza: Client.Stanza) {
                     try {
                         me.emitStanza(stanza);
                     }
@@ -203,10 +205,21 @@ export class XMPPClient extends chat_objects.StanzaHandlerBase {
                     }
                 });
 
+                newClient.on('close', function (stanza: Client.Stanza) {
+                    try {
+                        me.closeSync();
+                    }
+                    catch (e) {
+                        me.controller.log(`[ERROR] XMPPClient.connect().close: ${chat_helpers.toStringSafe(e)}`);
+                    }
+                });
+
                 let completedErrorInvoked = false;
                 newClient.on('error', function (err) {
                     try {
                         if (err) {
+                            me.emit('error', err);
+
                             if (completedErrorInvoked) {
                                 me.controller.log(`[ERROR] XMPPClient.connect(2): ${chat_helpers.toStringSafe(err)}`);
                             }

@@ -76,7 +76,7 @@ export class ClientConnection implements vscode.Disposable {
      * Closes the connection to the client.
      */
     public close() {
-        this.client.destroy();
+        this.client.connection.disconnect();
     }
 
     /** @inheritdoc */
@@ -172,7 +172,7 @@ export class XMPPServer extends chat_objects.StanzaHandlerBase {
                 newServer.on('connection', function (client) {
                     try {
                         if (me._isStopping) {
-                            client.socket.destroy();
+                            client.connection.disconnect();
                             return;
                         }
 
@@ -231,11 +231,11 @@ export class XMPPServer extends chat_objects.StanzaHandlerBase {
                         client.on('error', function (err) {
                             try {
                                 if (err) {
-                                    me.controller.log(`[ERROR] XMPPServer.start(3): ${chat_helpers.toStringSafe(err)}`);
+                                    me.controller.log(`[ERROR] XMPPServer.start(2).error: ${chat_helpers.toStringSafe(err)}`);
                                 }
                             }
                             catch (e) {
-                                me.controller.log(`[ERROR] XMPPServer.start(2): ${chat_helpers.toStringSafe(e)}`);
+                                me.controller.log(`[ERROR] XMPPServer.start(1).error: ${chat_helpers.toStringSafe(e)}`);
                             }
                         });
                     }
@@ -246,13 +246,30 @@ export class XMPPServer extends chat_objects.StanzaHandlerBase {
 
                 newServer.on('listening', (err) => {
                     if (err) {
+                        me.emit('error', err);
+
                         completed(err);
                     }
                     else {
                         me._connections = [];
                         me._server = newServer;
 
+                        me.emit('started');
+
                         completed(null, true);
+                    }
+                });
+
+                let completedErrorInvoked = false;
+                newServer.on('error', (err) => {
+                    if (err) {
+                        me.emit('error', err);
+
+                        if (!completedErrorInvoked) {
+                            completedErrorInvoked = true;
+
+                            completed(err);
+                        }
                     }
                 });
             }
@@ -302,16 +319,15 @@ export class XMPPServer extends chat_objects.StanzaHandlerBase {
                 return false;  // no server started
             }
 
-            // close connections to clients
-            let allConnections = oldServer._connections;
-            if (allConnections) {
-                allConnections.forEach(c => {
-                    c.close();
-                });
-            }
+            oldServer.server.stop();
+            oldServer.server.close();
 
             me._connections = null;
             me._server = null;
+
+            me.emit('stopped');
+
+            return true;
         }
         finally {
             me._isStopping = false;

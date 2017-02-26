@@ -35,8 +35,17 @@ export abstract class StanzaHandlerBase extends Events.EventEmitter implements v
     /** @inheritdoc */
     public dispose() {
         this.removeAllListeners();
+
+        this.emit('disposed');
     }
 
+    /**
+     * Emits a stanza event.
+     * 
+     * @param {chat_contracts.Stanza} The stanza.
+     * 
+     * @return {boolean} Event has been emitted or not.
+     */
     protected emitStanza(stanza: chat_contracts.Stanza): boolean {
         if (!stanza) {
             return null;

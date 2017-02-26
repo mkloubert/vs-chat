@@ -64,4 +64,8 @@ export interface PackageFile {
  * A stanza.
  */
 export interface Stanza {
+    from: string;
+    to: string;
+    id: string;
+    type: string;
 }
