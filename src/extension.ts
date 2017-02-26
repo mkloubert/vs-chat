@@ -93,7 +93,9 @@ export function activate(context: vscode.ExtensionContext) {
         try {
             controller.start().then((hasBeenStarted) => {
                 if (hasBeenStarted) {
-                    vscode.window.showInformationMessage('[vs-chat] Server has been STARTED.');
+                    if (chat_helpers.toBooleanSafe(controller.config.showPopupOnSuccess, true)) {
+                        vscode.window.showInformationMessage(`[vs-chat] Chat server is RUNNING now!`);
+                    }
                 }
             }, (err) => {
                 vscode.window.showErrorMessage(`[vs-chat] Could not START server: ${chat_helpers.toStringSafe(err)}`);
@@ -109,7 +111,9 @@ export function activate(context: vscode.ExtensionContext) {
         try {
             controller.stop().then((hasBeenStopped) => {
                 if (hasBeenStopped) {
-                    vscode.window.showInformationMessage('[vs-chat] Server has been STOPPED.');
+                    if (chat_helpers.toBooleanSafe(controller.config.showPopupOnSuccess, true)) {
+                        vscode.window.showInformationMessage('[vs-chat] Server has been STOPPED.');
+                    }
                 }
             }, (err) => {
                 vscode.window.showErrorMessage(`[vs-chat] Could not STOP server: ${chat_helpers.toStringSafe(err)}`);

@@ -46,6 +46,10 @@ export const MEMENTO_LAST_PORT = 'vschatLastPort';
  */
 export interface Configuration {
     /**
+     * Run server on startup or not.
+     */
+    autoStart?: boolean;
+    /**
      * The name of the server's domain.
      */
     domain?: string;
@@ -53,6 +57,10 @@ export interface Configuration {
      * The TCP port the XMPP server should run on.
      */
     port?: number;
+    /**
+     * Indicates if an info popup / notification should be displayed after a successful start/stop of a server or not.
+     */
+    showPopupOnSuccess?: boolean;
 }
 
 /**

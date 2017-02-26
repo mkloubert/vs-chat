@@ -662,6 +662,43 @@ export class Controller implements vscode.Disposable {
             });
         }
         me._openConnections = [];
+
+        // auto start?
+        if (chat_helpers.toBooleanSafe(cfg.autoStart)) {
+            let startServer = () => {
+                me.start().then((hasBeenStarted) => {
+                    if (hasBeenStarted) {
+                        if (chat_helpers.toBooleanSafe(cfg.showPopupOnSuccess, true)) {
+                            vscode.window.showInformationMessage(`[vs-chat] Chat server is RUNNING now!`);
+                        }
+                    }
+                    else {
+                        vscode.window.showWarningMessage(`[vs-chat] Server has NOT been STARTED!`);
+                    }
+                }, (err) => {
+                    vscode.window.showErrorMessage(`[vs-chat] Could not START server: ${chat_helpers.toStringSafe(err)}`);
+                });
+            };
+
+            let currentServer = me._server;
+            if (currentServer) {
+                // first stop server
+
+                currentServer.stop().then((hasBeenStopped) => {
+                    if (hasBeenStopped) {
+                        startServer();
+                    }
+                    else {
+                        vscode.window.showWarningMessage(`[vs-chat] Server has NOT been STOPPED!`);
+                    }
+                }, (err) => {
+                    vscode.window.showErrorMessage(`[vs-chat] Could not STOP server: ${chat_helpers.toStringSafe(err)}`);
+                });
+            }
+            else {
+                startServer();
+            }
+        }
     }
 
     /**
