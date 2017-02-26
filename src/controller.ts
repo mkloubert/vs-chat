@@ -52,6 +52,10 @@ export class Controller implements vscode.Disposable {
      * Stores the package file of that extension.
      */
     protected readonly _PACKAGE_FILE: chat_contracts.PackageFile;
+    /**
+     * Stores the currently running server.
+     */
+    protected _server: chat_server.XMPPServer;
 
     /**
      * Initializes a new instance of that class.
@@ -76,6 +80,126 @@ export class Controller implements vscode.Disposable {
     }
 
     /**
+     * Connects to a server.
+     * 
+     * @return {Thenable<chat_client.XMPPClient>} The promise.
+     */
+    public connectTo(): Thenable<chat_client.XMPPClient> {
+        let me = this;
+        
+        return new Promise<chat_client.XMPPClient>((resolve, reject) => {
+            let completed = chat_helpers.createSimplePromiseCompletedAction(resolve, reject);
+
+            try {
+                vscode.window.showInputBox({
+                    placeHolder: 'Format: host[:port = 5222]',
+                    prompt: 'Enter the ADDRESS of the server.',
+                }).then((addr) => {
+                    addr = chat_helpers.normalizeString(addr);
+                    if (!addr) {
+                        completed(null, null);
+                        return;
+                    } 
+
+                    try {
+                        let host: string;
+                        let port: number;
+
+                        let sepIndex = addr.indexOf(':');
+                        if (sepIndex > -1) {
+                            host = addr.substr(0, sepIndex).trim();
+                            port = parseInt(addr.substr(sepIndex + 1).trim());
+                        }
+
+                        if (!host) {
+                            host = 'localhost';
+                        }
+
+                        if (isNaN(port)) {
+                            port = chat_contracts.DEFAULT_PORT;
+                        }
+
+                        vscode.window.showInputBox({
+                            placeHolder: 'Format: username[@domain]',
+                            prompt: 'Enter your username / JID',
+                        }).then((jid) => {
+                            jid = chat_helpers.toStringSafe(jid).trim();
+                            if (!jid) {
+                                completed(null, null);
+                                return;
+                            }
+
+                            try {
+                                let domain: string;
+                                let user: string;
+
+                                let sepIndex = jid.indexOf('@');
+                                if (sepIndex > -1) {
+                                    user = jid.substr(0, sepIndex).trim();
+                                    domain = jid.substr(sepIndex + 1).trim();
+                                }
+
+                                if (chat_helpers.isEmptyString(domain)) {
+                                    domain = host;
+                                }
+
+                                if (chat_helpers.isEmptyString(user)) {
+                                    user = me.name;
+                                }
+
+                                vscode.window.showInputBox({
+                                    value: '',
+                                    prompt: 'Your password',
+                                    password: true,
+                                }).then((pwd) => {
+                                    if (chat_helpers.isNullOrUndefined(pwd)) {
+                                        completed(null, null);
+                                        return;
+                                    }
+
+                                    try {
+                                        let newConnection = new chat_client.XMPPClient(me);
+
+                                        newConnection.connect({
+                                            host: host,
+                                            domain: domain,
+                                            password: pwd,
+                                            port: port,
+                                            user: user,
+                                        }).then(() => {
+                                            completed(null, newConnection);
+                                        }, (err) => {
+                                            completed(err);
+                                        });
+                                    }
+                                    catch (e) {
+                                        completed(e);
+                                    }
+                                }, (err) => {
+                                    completed(err);
+                                });
+                            }
+                            catch (e) {
+                                completed(e);
+                            }
+                        }, (err) => {
+                            completed(err);
+                        })
+                    }
+                    catch (e) {
+                        completed(e);
+                    }
+                }, (err) => {
+                    completed(err);
+                });
+            }
+            catch (e) {
+                completed(e);
+            }
+        });
+    }
+
+    /**
      * Gets the underlying extension context.
      */
     public get context(): vscode.ExtensionContext {
@@ -84,6 +208,12 @@ export class Controller implements vscode.Disposable {
 
     /** @inheritdoc */
     public dispose() {
+        let me = this;
+        
+        me.stop().then(() => {
+        }, (err) => {
+            me.log(`[ERROR] Controller.dispose().stop(): ${chat_helpers.toStringSafe(err)}`);
+        });
     }
 
     /**
@@ -119,7 +249,13 @@ export class Controller implements vscode.Disposable {
     /**
      * Is invoked when extension will be deactivated.
      */
-    public onDeactivate() { 
+    public onDeactivate() {
+        let me = this;
+        
+        me.stop().then(() => {
+        }, (err) => {
+            me.log(`[ERROR] Controller.onDeactivate().stop(): ${chat_helpers.toStringSafe(err)}`);
+        });
     }
 
     /**
@@ -150,5 +286,78 @@ export class Controller implements vscode.Disposable {
         let cfg = <chat_contracts.Configuration>vscode.workspace.getConfiguration("chat");
 
         this._config = cfg || {};
+    }
+
+    /**
+     * Starts a server based on the current configuration.
+     * 
+     * @return {Thenable<boolean>} The promise.
+     */
+    public start(): Thenable<boolean> {
+        let me = this;
+
+        return new Promise<boolean>((resolve, reject) => {
+            let completed = chat_helpers.createSimplePromiseCompletedAction(resolve, reject);
+
+            try {
+                if (me._server) {
+                    completed(null, false);  // already running
+                    return;
+                }
+
+                let cfg = me.config;
+
+                let newServer = new chat_server.XMPPServer(me);
+                newServer.start({
+                    domain: cfg.domain,
+                    port: cfg.port,
+                }).then((hasBeenStarted) => {
+                    if (hasBeenStarted) {
+                        me._server = newServer;
+                    }
+
+                    completed(null, hasBeenStarted);
+                }, (err) => {
+                    completed(err);
+                });
+            }
+            catch (e) {
+                completed(e);
+            }
+        });
+    }
+
+    /**
+     * Stops the current server.
+     * 
+     * @return {Thenable<boolean>} The promise.
+     */
+    public stop(): Thenable<boolean> {
+        let me = this;        
+
+        return new Promise<boolean>((resolve, reject) => {
+            let completed = chat_helpers.createSimplePromiseCompletedAction(resolve, reject);
+
+            try {
+                let oldServer = me._server;
+                if (!oldServer) {
+                    completed(null, false);  // no server running
+                    return;
+                }
+
+                oldServer.stop().then((hasBeenStopped) => {
+                    if (hasBeenStopped) {
+                        me._server = null;
+                    }
+
+                    completed(null, hasBeenStopped);
+                }, (err) => {
+                    completed(err);
+                });
+            }
+            catch (e) {
+                completed(e);
+            }
+        });
     }
 }

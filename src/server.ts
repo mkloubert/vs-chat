@@ -26,6 +26,7 @@
 import * as chat_contracts from './contracts';
 import * as chat_controller from './controller';
 import * as chat_helpers from './helpers';
+import * as chat_objects from './objects';
 import * as Events from 'events';
 import * as vscode from 'vscode';
 const XMPP = require('node-xmpp-server');
@@ -87,7 +88,7 @@ export class ClientConnection implements vscode.Disposable {
 /**
  * A XMPP server.
  */
-export class XMPPServer extends Events.EventEmitter implements vscode.Disposable {
+export class XMPPServer extends chat_objects.StanzaHandlerBase {
     /**
      * Stores the current client connections.
      */
@@ -126,6 +127,8 @@ export class XMPPServer extends Events.EventEmitter implements vscode.Disposable
     /** @inheritdoc */
     public dispose() {
         this.stopSync();
+
+        super.dispose();
     }
 
     /**
@@ -158,7 +161,7 @@ export class XMPPServer extends Events.EventEmitter implements vscode.Disposable
 
                 let domain = chat_helpers.normalizeString(opts.domain);
                 if (!domain) {
-                    domain = 'localhost';
+                    domain = me.controller.name;
                 }
 
                 let newServer = new XMPP.C2S.TCPServer({
@@ -209,19 +212,7 @@ export class XMPPServer extends Events.EventEmitter implements vscode.Disposable
 
                         client.on('stanza', function (stanza) {
                             try {
-                                /*
-                                var from = stanza.attrs.from;
-                                
-                                stanza.attrs.from = stanza.attrs.to;
-                                stanza.attrs.to = from;
-
-                                client.send(stanza); */
-
-                                //TODO
-
-                                if (stanza) {
-
-                                }
+                                me.emitStanza(stanza);
                             }
                             catch (e) {
                                 me.controller.log(`[ERROR] XMPPServer.start().stanza: ${chat_helpers.toStringSafe(e)}`);

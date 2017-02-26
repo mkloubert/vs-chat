@@ -23,45 +23,26 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-/**
- * The default TCP port for an un-secure connection.
- */
-export const DEFAULT_PORT = 5222;
+import * as chat_contracts from './contracts';
+import * as Events from 'events';
+import * as vscode from 'vscode';
+
 
 /**
- * The extension settings.
+ * Base object for handling stanzas.
  */
-export interface Configuration {
-    /**
-     * The name of the server's domain.
-     */
-    domain?: string;
-    /**
-     * The TCP port the XMPP server should run on.
-     */
-    port?: number;
-}
+export abstract class StanzaHandlerBase extends Events.EventEmitter implements vscode.Disposable {
+    /** @inheritdoc */
+    public dispose() {
+        this.removeAllListeners();
+    }
 
-/**
- * Describes the structure of the package file of that extenstion.
- */
-export interface PackageFile {
-    /**
-     * The display name.
-     */
-    displayName: string;
-    /**
-     * The (internal) name.
-     */
-    name: string;
-    /**
-     * The version string.
-     */
-    version: string;
-}
+    protected emitStanza(stanza: chat_contracts.Stanza): boolean {
+        if (!stanza) {
+            return null;
+        }
 
-/**
- * A stanza.
- */
-export interface Stanza {
+        return this.emit('stanza',
+                         stanza);
+    }
 }

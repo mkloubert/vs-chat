@@ -23,8 +23,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+import * as chat_contracts from './contracts';
 import * as chat_controller from './controller';
 import * as chat_helpers from './helpers';
+import * as chat_objects from './objects';
 const Client = require('node-xmpp-client');
 import * as Events from 'events';
 import * as vscode from 'vscode';
@@ -40,9 +42,17 @@ export interface ConnectionOptions {
      */
     domain?: string;
     /**
+     * The host address.
+     */
+    host?: string;
+    /**
      * The password.
      */
     password?: string;
+    /**
+     * The TCP port.
+     */
+    port?: number;
     /**
      * The user name / ID.
      */
@@ -52,7 +62,7 @@ export interface ConnectionOptions {
 /**
  * A XMPP client.
  */
-export class XMPPClient extends Events.EventEmitter implements vscode.Disposable {
+export class XMPPClient extends chat_objects.StanzaHandlerBase {
     /**
      * Stores the current client connection.
      */
@@ -142,6 +152,11 @@ export class XMPPClient extends Events.EventEmitter implements vscode.Disposable
                     return;
                 }
 
+                let host = chat_helpers.toStringSafe(opts.host);
+                if (chat_helpers.isEmptyString(host)) {
+                    host = 'localhost';
+                }
+
                 let user = chat_helpers.toStringSafe(opts.user);
                 if (chat_helpers.isEmptyString(user)) {
                     user = me.controller.name;
@@ -149,14 +164,22 @@ export class XMPPClient extends Events.EventEmitter implements vscode.Disposable
 
                 let domain = chat_helpers.toStringSafe(opts.domain);
                 if (chat_helpers.isEmptyString(domain)) {
-                    domain = 'localhost';
+                    domain = host;
                 }
 
                 let password = chat_helpers.toStringSafe(opts.password);
 
+                let port = parseInt(chat_helpers.toStringSafe(opts.port).trim());
+                if (isNaN(port)) {
+                    port = chat_contracts.DEFAULT_PORT;
+                }
+
                 let newClient = new Client({
+                    autostart: false,
+                    hort: host,
                     jid: `${user}@${domain}`,
                     password: password,
+                    port: port,
                 });
 
                 newClient.on('online', function () {
@@ -173,26 +196,33 @@ export class XMPPClient extends Events.EventEmitter implements vscode.Disposable
 
                 newClient.on('stanza', function (stanza) {
                     try {
-                        // console.log('client1: stanza', stanza.root().toString());
-                        if (stanza) {
-
-                        }
+                        me.emitStanza(stanza);
                     }
                     catch (e) {
                         me.controller.log(`[ERROR] XMPPClient.connect().stanza: ${chat_helpers.toStringSafe(e)}`);
                     }
                 });
 
+                let completedErrorInvoked = false;
                 newClient.on('error', function (err) {
                     try {
                         if (err) {
-                            me.controller.log(`[ERROR] XMPPClient.connect(2): ${chat_helpers.toStringSafe(err)}`);
+                            if (completedErrorInvoked) {
+                                me.controller.log(`[ERROR] XMPPClient.connect(2): ${chat_helpers.toStringSafe(err)}`);
+                            }
+                            else {
+                                completedErrorInvoked = true;
+
+                                completed(err);
+                            }
                         }
                     }
                     catch (e) {
                         me.controller.log(`[ERROR] XMPPClient.connect(1): ${chat_helpers.toStringSafe(e)}`);
                     }
                 });
+
+                newClient.connect();
             }
             catch (e) {
                 completed(e);
@@ -210,6 +240,8 @@ export class XMPPClient extends Events.EventEmitter implements vscode.Disposable
     /** @inheritdoc */
     public dispose() {
         this.closeSync();
+
+        super.dispose();
     }
 
     /**

@@ -2,7 +2,7 @@
   "name": "vs-chat",
   "displayName": "Chat",
   "description": "A XMPP (Jabber) based chat system.",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "publisher": "mkloubert",
   "engines": {
     "vscode": "^1.5.0"
@@ -22,7 +22,45 @@
     "*"
   ],
   "main": "./out/src/extension",
-  "contributes": {},
+  "contributes": {
+    "commands": [
+      {
+        "command": "extension.chat.startServer",
+        "title": "Start server",
+        "category": "Chat"
+      },
+      {
+        "command": "extension.chat.connectTo",
+        "title": "Connect to...",
+        "category": "Chat"
+      },
+      {
+        "command": "extension.chat.stopServer",
+        "title": "Stop server",
+        "category": "Chat"
+      }
+    ],
+    "configuration": {
+      "properties": {
+        "chat": {
+          "type": "object",
+          "properties": {
+            "domain": {
+              "default": "The name of the server's domain.",
+              "type": "string"
+            },
+            "port": {
+              "description": "The TCP port the XMPP server should run on.",
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535,
+              "default": 5222
+            }
+          }
+        }
+      }
+    }
+  },
   "scripts": {
     "vscode:prepublish": "tsc -p ./",
     "compile": "tsc -watch -p ./",

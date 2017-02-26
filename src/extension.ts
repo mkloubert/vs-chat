@@ -67,7 +67,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     controller = new chat_controller.Controller(context, outputChannel, pkgFile);
 
-    // open HTML document
+    // open chat window
     let openChatWindow = vscode.commands.registerCommand('extension.chat.openChatWindow', (/* @TODO */) => {
         try {
             let chatName = '@TODO';
@@ -88,12 +88,62 @@ export function activate(context: vscode.ExtensionContext) {
         }
     });
 
+    // start server
+    let startServer = vscode.commands.registerCommand('extension.chat.startServer', (/* @TODO */) => {
+        try {
+            controller.start().then((hasBeenStarted) => {
+                if (hasBeenStarted) {
+                    vscode.window.showInformationMessage('[vs-chat] Server has been STARTED.');
+                }
+            }, (err) => {
+                vscode.window.showErrorMessage(`[vs-chat] Could not START server: ${chat_helpers.toStringSafe(err)}`);
+            });
+        }
+        catch (e) {
+            chat_helpers.log(`[ERROR] extension.chat.startServer(): ${e}`);
+        }
+    });
+
+    // stop server
+    let stopServer = vscode.commands.registerCommand('extension.chat.stopServer', (/* @TODO */) => {
+        try {
+            controller.stop().then((hasBeenStopped) => {
+                if (hasBeenStopped) {
+                    vscode.window.showInformationMessage('[vs-chat] Server has been STOPPED.');
+                }
+            }, (err) => {
+                vscode.window.showErrorMessage(`[vs-chat] Could not STOP server: ${chat_helpers.toStringSafe(err)}`);
+            });
+        }
+        catch (e) {
+            chat_helpers.log(`[ERROR] extension.chat.stopServer(): ${e}`);
+        }
+    });
+
+    // connect to server
+    let connectTo = vscode.commands.registerCommand('extension.chat.connectTo', (/* @TODO */) => {
+        try {
+            controller.connectTo().then((conn) => {
+                if (conn) {
+                    
+                }
+            }, (err) => {
+                vscode.window.showErrorMessage(`[vs-chat] Could not CONNECT to server: ${chat_helpers.toStringSafe(err)}`);
+            });
+        }
+        catch (e) {
+            chat_helpers.log(`[ERROR] extension.chat.connectTo(): ${e}`);
+        }
+    });
+
     let chatWindow = vscode.workspace.registerTextDocumentContentProvider('vs-cron-html',
                                                                           new chat_window.HtmlTextDocumentContentProvider(controller));
 
     // commands
     context.subscriptions
-           .push(openChatWindow);
+           .push(openChatWindow,
+                 startServer, stopServer,
+                 connectTo);
 
     // controller
     context.subscriptions

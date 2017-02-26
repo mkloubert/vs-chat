@@ -37,6 +37,21 @@ export type SimpleCompletedAction<TResult> = (err?: any, result?: TResult) => vo
 
 
 /**
+ * Returns a value as array.
+ * 
+ * @param {T | T[]} val The value.
+ * 
+ * @return {T[]} The value as array.
+ */
+export function asArray<T>(val: T | T[]): T[] {
+    if (!Array.isArray(val)) {
+        return [ val ];
+    }
+
+    return val;
+}
+
+/**
  * Creates a simple 'completed' callback for a promise.
  * 
  * @param {Function} resolve The 'succeeded' callback.
