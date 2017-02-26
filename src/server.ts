@@ -261,15 +261,25 @@ export class XMPPServer extends chat_objects.StanzaHandlerBase {
                 });
 
                 let completedErrorInvoked = false;
-                newServer.on('error', (err) => {
+                let invokeErrorCompleted = (err) => {
                     if (err) {
-                        me.emit('error', err);
-
-                        if (!completedErrorInvoked) {
+                        if (completedErrorInvoked) {
+                            me.controller.log(`[ERROR] XMPPClient.start(2): ${chat_helpers.toStringSafe(err)}`);
+                        }
+                        else {
                             completedErrorInvoked = true;
 
                             completed(err);
                         }
+                    }
+                };
+
+                newServer.on('error', function (err) {
+                    try {
+                        invokeErrorCompleted(err);
+                    }
+                    catch (e) {
+                        invokeErrorCompleted(e);
                     }
                 });
             }

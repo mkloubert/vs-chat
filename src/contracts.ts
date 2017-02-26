@@ -27,6 +27,19 @@
  * The default TCP port for an un-secure connection.
  */
 export const DEFAULT_PORT = 5222;
+/**
+ * Name of memento value for storing last connection settings.
+ */
+export const MEMENTO_LAST_CONNECTION_SETTINGS = 'vschatLastConnectionSettings';
+/**
+ * Name of memento value for storing last host.
+ */
+export const MEMENTO_LAST_HOST = 'vschatLastHost';
+/**
+ * Name of memento value for storing last port.
+ */
+export const MEMENTO_LAST_PORT = 'vschatLastPort';
+
 
 /**
  * The extension settings.
@@ -40,6 +53,42 @@ export interface Configuration {
      * The TCP port the XMPP server should run on.
      */
     port?: number;
+}
+
+/**
+ * A repository that stores last connection settings.
+ */
+export interface LastConnectionSettingRepository {
+    /**
+     * Gets the settings by key.
+     * 
+     * @param {string} key The key.
+     * 
+     * @return {LastConnectionSettings} The settings.
+     */
+    [key: string]: LastConnectionSettings;
+}
+
+/**
+ * Stores last connection settings.
+ */
+export interface LastConnectionSettings {
+    /**
+     * Domain
+     */
+    domain?: string;
+    /**
+     * User
+     */
+    user?: string;
+    /**
+     * Password
+     */
+    password?: string;
+    /**
+     * Indicates if GUI should ask for saving the password or not.
+     */
+    askForSavingPassword?: boolean;
 }
 
 /**

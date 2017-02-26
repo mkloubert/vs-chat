@@ -2,7 +2,7 @@
   "name": "vs-chat",
   "displayName": "Chat",
   "description": "A XMPP (Jabber) based chat system.",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "publisher": "mkloubert",
   "engines": {
     "vscode": "^1.5.0"
@@ -25,13 +25,23 @@
   "contributes": {
     "commands": [
       {
-        "command": "extension.chat.startServer",
-        "title": "Start server",
+        "command": "extension.chat.closeConnections",
+        "title": "Close connection(s)",
         "category": "Chat"
       },
       {
         "command": "extension.chat.connectTo",
-        "title": "Connect to...",
+        "title": "Connect to server",
+        "category": "Chat"
+      },
+      {
+        "command": "extension.chat.deleteSettings",
+        "title": "Delete settings",
+        "category": "Chat"
+      },
+      {
+        "command": "extension.chat.startServer",
+        "title": "Start server",
         "category": "Chat"
       },
       {

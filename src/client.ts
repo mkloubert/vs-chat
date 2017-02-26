@@ -33,6 +33,34 @@ import * as vscode from 'vscode';
 const XMPP = require('node-xmpp-server');
 
 
+let nextConnectionId = -1;
+
+/**
+ * Connection data.
+ */
+export interface ClientConnectionData {
+    /**
+     * Domain
+     */
+    domain: string;
+    /**
+     * Host
+     */
+    host: string;
+    /**
+     * ID of the connection.
+     */
+    id: number;
+    /**
+     * TCP port.
+     */
+    port: number;
+    /**
+     * User
+     */
+    user: string;
+}
+
 /**
  * Connection options.
  */
@@ -67,6 +95,10 @@ export class XMPPClient extends chat_objects.StanzaHandlerBase {
      * Stores the current client connection.
      */
     protected _client: any;
+    /**
+     * Stores the current connection data.
+     */
+    protected _connection: ClientConnectionData;
     /**
      * Stores the underlying controller.
      */
@@ -123,6 +155,7 @@ export class XMPPClient extends chat_objects.StanzaHandlerBase {
 
         oldClient.connection.socket.destroy();
 
+        me._connection = null;
         me._client = null;
         me._domain = null;
 
@@ -176,10 +209,12 @@ export class XMPPClient extends chat_objects.StanzaHandlerBase {
                     port = chat_contracts.DEFAULT_PORT;
                 }
 
+                let jid = `${user}@${domain}`;
+
                 let newClient = new Client.Client({
                     autostart: false,
                     host: host,
-                    jid: `${user}@${domain}`,
+                    jid: jid,
                     password: password,
                     port: port,
                 });
@@ -188,6 +223,14 @@ export class XMPPClient extends chat_objects.StanzaHandlerBase {
                     try {
                         me._domain = domain;
                         me._client = newClient;
+
+                        me._connection = {
+                            domain: domain,
+                            host: host,
+                            id: ++nextConnectionId,
+                            port: port,
+                            user: user,
+                        };
 
                         completed(null, true);
                     }
@@ -215,23 +258,25 @@ export class XMPPClient extends chat_objects.StanzaHandlerBase {
                 });
 
                 let completedErrorInvoked = false;
-                newClient.on('error', function (err) {
-                    try {
-                        if (err) {
-                            me.emit('error', err);
+                let invokeErrorCompleted = (err) => {
+                    if (err) {
+                        if (completedErrorInvoked) {
+                            me.controller.log(`[ERROR] XMPPClient.connect(2): ${chat_helpers.toStringSafe(err)}`);
+                        }
+                        else {
+                            completedErrorInvoked = true;
 
-                            if (completedErrorInvoked) {
-                                me.controller.log(`[ERROR] XMPPClient.connect(2): ${chat_helpers.toStringSafe(err)}`);
-                            }
-                            else {
-                                completedErrorInvoked = true;
-
-                                completed(err);
-                            }
+                            completed(err);
                         }
                     }
+                };
+
+                newClient.on('error', function (err) {
+                    try {
+                        invokeErrorCompleted(err);
+                    }
                     catch (e) {
-                        me.controller.log(`[ERROR] XMPPClient.connect(1): ${chat_helpers.toStringSafe(e)}`);
+                        invokeErrorCompleted(e);
                     }
                 });
 
@@ -241,6 +286,13 @@ export class XMPPClient extends chat_objects.StanzaHandlerBase {
                 completed(e);
             }
         });
+    }
+
+    /**
+     * Gets the data of the current connection.
+     */
+    public get connection(): ClientConnectionData {
+        return this._connection;
     }
 
     /**
@@ -255,6 +307,13 @@ export class XMPPClient extends chat_objects.StanzaHandlerBase {
         this.closeSync();
 
         super.dispose();
+    }
+
+    /**
+     * Gets if client is currently connected or not.
+     */
+    public get isConnected(): boolean {
+        return this.connection ? true : false;
     }
 
     /**

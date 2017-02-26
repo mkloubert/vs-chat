@@ -45,6 +45,10 @@ export class Controller implements vscode.Disposable {
      */
     protected readonly _CONTEXT: vscode.ExtensionContext;
     /**
+     * Stores all open connections.
+     */
+    protected _openConnections: chat_client.XMPPClient[];
+    /**
      * Stores the global output channel.
      */
     protected readonly _OUTPUT_CHANNEL: vscode.OutputChannel;
@@ -73,6 +77,107 @@ export class Controller implements vscode.Disposable {
     }
 
     /**
+     * Closes connection(s).
+     * 
+     * @return {Thenable<chat_client.ClientConnectionData|boolean>} The promise.
+     */
+    public closeConnections(): Thenable<chat_client.ClientConnectionData | boolean> {
+        let me = this;
+        
+        return new Promise<chat_client.ClientConnectionData | boolean>((resolve, reject) => {
+            let completed = chat_helpers.createSimplePromiseCompletedAction(resolve, reject);
+
+            try {
+                let connections = me._openConnections.filter(x => x);
+
+                interface ConnectionQuickPickItem extends vscode.QuickPickItem {
+                    __vschatConn: chat_client.XMPPClient;
+                    __vschatIndex: number;
+                }
+
+                let quickPicks: ConnectionQuickPickItem[] = [
+                    {
+                        __vschatConn: undefined,
+                        __vschatIndex: undefined,
+                        label: '(All)',
+                        description: 'Removes all stored settings',
+                    }
+                ];
+
+                quickPicks = quickPicks.concat(connections.map((x, i): ConnectionQuickPickItem => {
+                    let label = '';
+                    let description = '';
+
+                    let data = x.connection;
+                    if (data) {
+                        label = `${data.host}:${data.port}`;
+                        description = `Logged in as '${data.user}@${data.domain}'`;
+                    }
+
+                    return {
+                        '__vschatIndex': i,
+                        '__vschatConn': x,
+                        label: label,
+                        description: description,
+                    };
+                }));
+
+                if (connections.length > 0) {
+                    vscode.window.showQuickPick(quickPicks, {
+                        placeHolder: 'Select the connection you would like to close',
+                    }).then((selectedItem) => {
+                        if (selectedItem) {
+                            let result: chat_client.ClientConnectionData | boolean;
+                            let connectionsToClose: chat_client.XMPPClient[];
+                            if (selectedItem.__vschatConn) {
+                                result = selectedItem.__vschatConn.connection;
+
+                                connectionsToClose = connections.filter(x => {
+                                    return x.connection.id === selectedItem.__vschatConn.connection.id;
+                                });
+                            }
+                            else {
+                                connectionsToClose = connections;
+                                result = true;
+                            }
+
+                            let nextConnection: () => void;
+                            nextConnection = () => {
+                                if (connectionsToClose.length < 1) {
+                                    me._openConnections = me._openConnections.filter(x => x.isConnected);
+
+                                    completed(null, result);
+                                    return;
+                                }
+
+                                let c = connectionsToClose.shift();
+                                c.close().then(() => {
+                                    nextConnection();
+                                }, (err) => {
+                                    completed(err);
+                                });
+                            };
+
+                            nextConnection();
+                        }
+                        else {
+                            completed(null, null);
+                        }
+                    }, (err) => {
+                        completed(err);
+                    });
+                }
+                else {
+                    completed(null, false);
+                }
+            }
+            catch (e) {
+                completed(e);
+            }
+        });
+    }
+
+    /**
      * Gets the current configuration.
      */
     public get config(): chat_contracts.Configuration {
@@ -91,9 +196,64 @@ export class Controller implements vscode.Disposable {
             let completed = chat_helpers.createSimplePromiseCompletedAction(resolve, reject);
 
             try {
+                let host: string;
+                try {
+                    host = me.context.globalState.get<string>(chat_contracts.MEMENTO_LAST_HOST);
+                }
+                catch (e) {
+
+                }
+                let port: number;
+                try {
+                    port = me.context.globalState.get<number>(chat_contracts.MEMENTO_LAST_HOST);
+                }
+                catch (e) {
+
+                }
+
+                let getRepoKey = (): string => {
+                    let key: string;
+                    if (host && !isNaN(port)) {
+                        key = chat_helpers.normalizeString(`${host}:${port}`);
+                    }
+
+                    return key;
+                };
+
+                let getLastSettings = (): chat_contracts.LastConnectionSettings => {
+                    let lastSettings: chat_contracts.LastConnectionSettings;
+                    try {
+                        let repo = me.context.globalState.get<chat_contracts.LastConnectionSettingRepository>(chat_contracts.MEMENTO_LAST_CONNECTION_SETTINGS);
+                        if (repo) {
+                            let key = getRepoKey();
+
+                            if (key) {
+                                lastSettings = repo[key];
+                            }
+                        }
+                    }
+                    catch (e) {
+                        me.log(`[ERROR] Controller.connectTo().getLastSettings(): ${chat_helpers.toStringSafe(e)}`);
+                    }
+
+                    return lastSettings || {};
+                };
+
+                let connSettings = getLastSettings();
+
+                let initialHostValue = '';
+                if (!chat_helpers.isEmptyString(host)) {
+                    initialHostValue += host;
+                }
+                if (!isNaN(port)) {
+                    initialHostValue += ':' + port;
+                }
+
+                // host and port
                 vscode.window.showInputBox({
+                    value: initialHostValue,
                     placeHolder: 'Format: host[:port = 5222]',
-                    prompt: 'Enter the ADDRESS of the server.',
+                    prompt: 'Chat HOST',
                 }).then((addr) => {
                     addr = chat_helpers.normalizeString(addr);
                     if (!addr) {
@@ -102,8 +262,41 @@ export class Controller implements vscode.Disposable {
                     } 
 
                     try {
-                        let host: string;
-                        let port: number;
+                        let domain: string;
+                        let user: string;
+                        let password: string;
+                        let askForSavingPassword: boolean;
+                        
+                        let updateLastSettings = (savePassword = false): chat_contracts.LastConnectionSettings => {
+                            try {
+                                let key = getRepoKey();
+                                if (!key) {
+                                    return;
+                                }
+
+                                let repo = me.context.globalState.get<chat_contracts.LastConnectionSettingRepository>(chat_contracts.MEMENTO_LAST_CONNECTION_SETTINGS) || {};
+
+                                let lastSettings: chat_contracts.LastConnectionSettings = {
+                                    domain: domain,
+                                    user: user,
+                                    askForSavingPassword: askForSavingPassword,
+                                };
+
+                                if (savePassword) {
+                                    lastSettings.password = password;
+                                }
+
+                                repo[key] = lastSettings;
+
+                                me.context.globalState.update(chat_contracts.MEMENTO_LAST_CONNECTION_SETTINGS, repo);
+                                askForSavingPassword = lastSettings.askForSavingPassword;
+                            }
+                            catch (e) {
+                                me.log(`[ERROR] Controller.connectTo().updateLastSettings(): ${chat_helpers.toStringSafe(e)}`);
+                            }
+
+                            return getLastSettings();
+                        };
 
                         let sepIndex = addr.indexOf(':');
                         if (sepIndex > -1) {
@@ -119,37 +312,97 @@ export class Controller implements vscode.Disposable {
                             port = chat_contracts.DEFAULT_PORT;
                         }
 
-                        vscode.window.showInputBox({
-                            placeHolder: 'Format: username[@domain]',
-                            prompt: 'Enter your username / JID',
-                        }).then((jid) => {
-                            jid = chat_helpers.toStringSafe(jid).trim();
-                            if (!jid) {
-                                completed(null, null);
-                                return;
+                        // save last host and port
+                        try {
+                            me.context.globalState.update(chat_contracts.MEMENTO_LAST_HOST, host);
+                            me.context.globalState.update(chat_contracts.MEMENTO_LAST_PORT, port);
+                        }
+                        catch (e) {
+                        }
+
+                        connSettings = getLastSettings();
+
+                        let initialUserValue = '';
+                        if (!chat_helpers.isEmptyString(connSettings.user)) {
+                            initialUserValue += connSettings.user;
+                        }
+                        if (!chat_helpers.isEmptyString(connSettings.domain)) {
+                            initialUserValue += '@' + connSettings.domain;
+                        }
+
+                        let askForPassword = () => {
+                            let initialPasswordValue = '';
+                            if (connSettings.password) {
+                                initialPasswordValue = chat_helpers.toStringSafe(connSettings.password);
                             }
 
-                            try {
-                                let domain: string;
-                                let user: string;
+                            let startConnection = () => {
+                                let savePassword = () => {
+                                    connSettings = getLastSettings();
+                                    if (!chat_helpers.toBooleanSafe(connSettings.askForSavingPassword, true)) {
+                                        return;
+                                    }
 
-                                let sepIndex = jid.indexOf('@');
-                                if (sepIndex > -1) {
-                                    user = jid.substr(0, sepIndex).trim();
-                                    domain = jid.substr(sepIndex + 1).trim();
+                                    vscode.window.showQuickPick(['No', 'Yes'], {
+                                        placeHolder: `SAVE password '${user}@${domain}'?`,
+                                    }).then((selected) => {
+                                        selected = chat_helpers.normalizeString(selected);
+
+                                        let savePwd = false;
+                                        askForSavingPassword = false;
+                                        if ('yes' === selected) {
+                                            savePwd = true;
+                                        }
+                                        else if ('no' === selected) {
+                                            password = undefined;
+                                        }
+                                        else {
+                                            askForSavingPassword = undefined;
+                                        }
+
+                                        connSettings = updateLastSettings(savePwd);
+                                    });
+                                };
+
+                                try {
+                                    let newConnection = new chat_client.XMPPClient(me);
+
+                                    newConnection.connect({
+                                        host: host,
+                                        domain: domain,
+                                        password: password,
+                                        port: port,
+                                        user: user,
+                                    }).then(() => {
+                                        updateLastSettings();
+
+                                        me._openConnections.push(newConnection);
+                                        completed(null, newConnection);
+
+                                        savePassword();
+                                    }, (err) => {
+                                        connSettings = getLastSettings();
+
+                                        delete connSettings.password;
+                                        connSettings = updateLastSettings();
+
+                                        completed(err);
+                                    });
                                 }
-
-                                if (chat_helpers.isEmptyString(domain)) {
-                                    domain = host;
+                                catch (e) {
+                                    completed(e);
                                 }
+                            };
 
-                                if (chat_helpers.isEmptyString(user)) {
-                                    user = me.name;
-                                }
+                            if (initialPasswordValue) {
+                                password = connSettings.password;
 
+                                startConnection();
+                            }
+                            else {
                                 vscode.window.showInputBox({
-                                    value: '',
-                                    prompt: 'Your password',
+                                    value: initialPasswordValue,
+                                    prompt: `PASSWORD for '${user}@${domain}'`,
                                     password: true,
                                 }).then((pwd) => {
                                     if (chat_helpers.isNullOrUndefined(pwd)) {
@@ -157,34 +410,61 @@ export class Controller implements vscode.Disposable {
                                         return;
                                     }
 
-                                    try {
-                                        let newConnection = new chat_client.XMPPClient(me);
-
-                                        newConnection.connect({
-                                            host: host,
-                                            domain: domain,
-                                            password: pwd,
-                                            port: port,
-                                            user: user,
-                                        }).then(() => {
-                                            completed(null, newConnection);
-                                        }, (err) => {
-                                            completed(err);
-                                        });
-                                    }
-                                    catch (e) {
-                                        completed(e);
-                                    }
+                                    password = pwd;
+                                    startConnection();
                                 }, (err) => {
                                     completed(err);
                                 });
                             }
-                            catch (e) {
-                                completed(e);
-                            }
-                        }, (err) => {
-                            completed(err);
-                        })
+                        };
+
+                        if (initialUserValue) {
+                            user = connSettings.user;
+                            domain = connSettings.domain;
+
+                            askForPassword();
+                        }
+                        else {
+                            // ask for user
+
+                            vscode.window.showInputBox({
+                                value: '',
+                                placeHolder: 'Format: username[@domain]',
+                                prompt: `User / JID for '${host}:${port}'`,
+                            }).then((jid) => {
+                                jid = chat_helpers.toStringSafe(jid).trim();
+                                if (!jid) {
+                                    completed(null, null);
+                                    return;
+                                }
+
+                                try {
+                                    let sepIndex = jid.indexOf('@');
+                                    if (sepIndex > -1) {
+                                        user = jid.substr(0, sepIndex).trim();
+                                        domain = jid.substr(sepIndex + 1).trim();
+                                    }
+                                    else {
+                                        user = jid;
+                                    }
+
+                                    if (chat_helpers.isEmptyString(domain)) {
+                                        domain = host;
+                                    }
+
+                                    if (chat_helpers.isEmptyString(user)) {
+                                        user = me.name;
+                                    }
+
+                                    askForPassword();
+                                }
+                                catch (e) {
+                                    completed(e);
+                                }
+                            }, (err) => {
+                                completed(err);
+                            });   
+                        }
                     }
                     catch (e) {
                         completed(e);
@@ -204,6 +484,88 @@ export class Controller implements vscode.Disposable {
      */
     public get context(): vscode.ExtensionContext {
         return this._CONTEXT;
+    }
+
+    /**
+     * Deletes settings.
+     * 
+     * @return {Thenable<string|boolean>} The promise.
+     */
+    public deleteSettings(): Thenable<string | boolean> {
+        let me = this;
+
+        return new Promise<string | boolean>((resolve, reject) => {
+            let completed = chat_helpers.createSimplePromiseCompletedAction(resolve, reject);
+            
+            try {
+                let keys: string[] = [];
+
+                let repo = me.context.globalState.get<chat_contracts.LastConnectionSettingRepository>(chat_contracts.MEMENTO_LAST_CONNECTION_SETTINGS);
+                if (repo) {
+                    for (let k in repo) {
+                        keys.push(k);
+                    }    
+                }
+
+                if (keys.length > 0) {
+                    interface RemoveStoredSettingsQuickPickItem extends vscode.QuickPickItem {
+                        __vschatIndex: number;
+                    }
+
+                    let quickPicks: RemoveStoredSettingsQuickPickItem[] = [
+                        {
+                            __vschatIndex: undefined,
+                            label: '(All)',
+                            description: 'Removes all stored settings',
+                        }
+                    ];
+
+                    quickPicks = quickPicks.concat(keys.map((x, i): RemoveStoredSettingsQuickPickItem => {
+                        let result: any = {
+                            '__vschatIndex': i,
+                            label: x,
+                            description: '',
+                        };
+
+                        return result;
+                    }));
+
+                    vscode.window.showQuickPick(quickPicks).then((selectedItem) => {
+                        try {
+                            let result: string | boolean = null;
+
+                            if (selectedItem) {
+                                let key = selectedItem.label;
+
+                                if (chat_helpers.isNullOrUndefined(selectedItem.__vschatIndex)) {
+                                    repo = {};
+                                    result = true;
+                                }
+                                else {
+                                    delete repo[key];
+                                    result = key;
+                                }
+
+                                me.context.globalState.update(chat_contracts.MEMENTO_LAST_CONNECTION_SETTINGS, repo);
+                            }
+
+                            completed(null, result);
+                        }
+                        catch (e) {
+                            completed(e);
+                        }
+                    }, (err) => {
+                        completed(err);
+                    });
+                }
+                else {
+                    completed(null, false);  // nothing that can be deleted
+                }
+            }
+            catch (e) {
+                completed(e);
+            }
+        });
     }
 
     /** @inheritdoc */
@@ -283,9 +645,23 @@ export class Controller implements vscode.Disposable {
      * Reloads configuration.
      */
     public reloadConfiguration() {
+        let me = this;
+
         let cfg = <chat_contracts.Configuration>vscode.workspace.getConfiguration("chat");
 
-        this._config = cfg || {};
+        me._config = cfg || {};
+
+        let oldConnections = me._openConnections;
+        if (oldConnections) {
+            oldConnections.filter(x => x).forEach(x => {
+                x.close().then(() => {
+
+                }, () => {
+
+                });
+            });
+        }
+        me._openConnections = [];
     }
 
     /**

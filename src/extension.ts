@@ -80,11 +80,11 @@ export function activate(context: vscode.ExtensionContext) {
             vscode.commands.executeCommand('vscode.previewHtml', url, vscode.ViewColumn.One, title).then((success) => {
                 // TODO
             }, (err) => {
-                chat_helpers.log(`[ERROR] extension.chat.openChatWindow(2): ${err}`);
+                chat_helpers.log(`[ERROR] extension.chat.openChatWindow(2): ${chat_helpers.toStringSafe(err)}`);
             });
         }
         catch (e) {
-            chat_helpers.log(`[ERROR] extension.chat.openChatWindow(1): ${e}`);
+            chat_helpers.log(`[ERROR] extension.chat.openChatWindow(1): ${chat_helpers.toStringSafe(e)}`);
         }
     });
 
@@ -100,7 +100,7 @@ export function activate(context: vscode.ExtensionContext) {
             });
         }
         catch (e) {
-            chat_helpers.log(`[ERROR] extension.chat.startServer(): ${e}`);
+            chat_helpers.log(`[ERROR] extension.chat.startServer(): ${chat_helpers.toStringSafe(e)}`);
         }
     });
 
@@ -116,7 +116,31 @@ export function activate(context: vscode.ExtensionContext) {
             });
         }
         catch (e) {
-            chat_helpers.log(`[ERROR] extension.chat.stopServer(): ${e}`);
+            chat_helpers.log(`[ERROR] extension.chat.stopServer(): ${chat_helpers.toStringSafe(e)}`);
+        }
+    });
+
+    // close connection(s)
+    let closeConnections = vscode.commands.registerCommand('extension.chat.closeConnections', (/* @TODO */) => {
+        try {
+            controller.closeConnections().then((data) => {
+                if (false === data) {
+                    vscode.window.showWarningMessage(`[vs-chat] There are NO CONNECTIONS to disconnect from!`);
+                }
+                else if (data) {
+                    if (true === data) {
+                        vscode.window.showInformationMessage(`[vs-chat] ALL CONNECTIONS have been closed.`);
+                    }
+                    else {
+                        vscode.window.showInformationMessage(`[vs-chat] Connection to '${data.host}:${data.port}' has been CLOSED.`);
+                    }
+                }
+            }, (err) => {
+                vscode.window.showErrorMessage(`[vs-chat] Could not CLOSE connection(s): ${chat_helpers.toStringSafe(err)}`);
+            });
+        }
+        catch (e) {
+            chat_helpers.log(`[ERROR] extension.chat.closeConnections(): ${chat_helpers.toStringSafe(e)}`);
         }
     });
 
@@ -124,15 +148,44 @@ export function activate(context: vscode.ExtensionContext) {
     let connectTo = vscode.commands.registerCommand('extension.chat.connectTo', (/* @TODO */) => {
         try {
             controller.connectTo().then((conn) => {
-                if (conn) {
-                    
+                if (!conn) {
+                    return;
+                }
+
+                let data = conn.connection;
+                if (data) {
+                    vscode.window.showInformationMessage(`[vs-chat] ESTABLISHED CONNECTION to '${data.host}:${data.port}' as '${data.user}@${data.domain}'.`);
                 }
             }, (err) => {
                 vscode.window.showErrorMessage(`[vs-chat] Could not CONNECT to server: ${chat_helpers.toStringSafe(err)}`);
             });
         }
         catch (e) {
-            chat_helpers.log(`[ERROR] extension.chat.connectTo(): ${e}`);
+            chat_helpers.log(`[ERROR] extension.chat.connectTo(): ${chat_helpers.toStringSafe(e)}`);
+        }
+    });
+
+    // delete settings
+    let deleteSettings = vscode.commands.registerCommand('extension.chat.deleteSettings', (/* @TODO */) => {
+        try {
+            controller.deleteSettings().then((key) => {
+                if (false === key) {
+                    vscode.window.showWarningMessage(`[vs-chat] There are NO SETTINGS to remove!`);
+                }
+                else if (key) {
+                    if (true === key) {
+                        vscode.window.showInformationMessage(`[vs-chat] ALL SETTINGS have been removed.`);
+                    }
+                    else {
+                        vscode.window.showInformationMessage(`[vs-chat] SETTINGS for '${key}' have been removed.`);
+                    }
+                }
+            }, (err) => {
+                vscode.window.showErrorMessage(`[vs-chat] Could not DELETE SETTINGS: ${chat_helpers.toStringSafe(err)}`);
+            });
+        }
+        catch (e) {
+            chat_helpers.log(`[ERROR] extension.chat.connectTo(): ${chat_helpers.toStringSafe(e)}`);
         }
     });
 
@@ -143,7 +196,7 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions
            .push(openChatWindow,
                  startServer, stopServer,
-                 connectTo);
+                 connectTo, closeConnections, deleteSettings);
 
     // controller
     context.subscriptions
