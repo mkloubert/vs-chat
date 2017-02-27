@@ -35,31 +35,6 @@ const XMPP = require('node-xmpp-server');
 
 let nextConnectionId = Number.MIN_SAFE_INTEGER;
 
-/**
- * Connection data.
- */
-export interface ClientConnectionData {
-    /**
-     * Domain
-     */
-    domain: string;
-    /**
-     * Host
-     */
-    host: string;
-    /**
-     * ID of the connection.
-     */
-    id: number;
-    /**
-     * TCP port.
-     */
-    port: number;
-    /**
-     * User
-     */
-    user: string;
-}
 
 /**
  * Connection options.
@@ -110,9 +85,9 @@ export class XMPPClient extends chat_objects.StanzaHandlerBase implements chat_c
      */
     protected _client: any;
     /**
-     * Stores the current connection data.
+     * Stores the current connection information.
      */
-    protected _connection: ClientConnectionData;
+    protected _connection: chat_contracts.ClientConnectionInfo;
     /**
      * Stores the underlying controller.
      */
@@ -312,10 +287,8 @@ export class XMPPClient extends chat_objects.StanzaHandlerBase implements chat_c
         });
     }
 
-    /**
-     * Gets the data of the current connection.
-     */
-    public get connection(): ClientConnectionData {
+    /** @inheritdoc */
+    public get connection(): chat_contracts.ClientConnectionInfo {
         return this._connection;
     }
 
@@ -335,7 +308,27 @@ export class XMPPClient extends chat_objects.StanzaHandlerBase implements chat_c
 
     /** @inheritdoc */
     protected handleStanza(ctx: StanzaContext) {
+        let stanzaModule: chat_contracts.StanzaModule<StanzaContext>;
 
+        try {
+            let name = chat_helpers.normalizeString(ctx.stanza.name);
+            if (name) {
+                if (/[\w|_|-]*/i.test(name)) {
+                    stanzaModule = require('./stanza/client/' + name);
+                }
+            }
+        }
+        catch (e) {
+            // not found
+        }
+
+        if (stanzaModule) {
+            stanzaModule.handle(ctx);
+        }
+        else {
+            //TODO: check if this works!
+            ctx.client.client.connection.error('unsupported-stanza-type', 'Stanza not supported!');
+        }
     }
 
     /**

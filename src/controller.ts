@@ -79,12 +79,12 @@ export class Controller implements vscode.Disposable {
     /**
      * Closes connection(s).
      * 
-     * @return {Thenable<chat_client.ClientConnectionData|boolean>} The promise.
+     * @return {Thenable<chat_contracts.ClientConnectionInfo|boolean>} The promise.
      */
-    public closeConnections(): Thenable<chat_client.ClientConnectionData | boolean> {
+    public closeConnections(): Thenable<chat_contracts.ClientConnectionInfo | boolean> {
         let me = this;
         
-        return new Promise<chat_client.ClientConnectionData | boolean>((resolve, reject) => {
+        return new Promise<chat_contracts.ClientConnectionInfo | boolean>((resolve, reject) => {
             let completed = chat_helpers.createSimplePromiseCompletedAction(resolve, reject);
 
             try {
@@ -127,7 +127,7 @@ export class Controller implements vscode.Disposable {
                         placeHolder: 'Select the connection you would like to close',
                     }).then((selectedItem) => {
                         if (selectedItem) {
-                            let result: chat_client.ClientConnectionData | boolean;
+                            let result: chat_contracts.ClientConnectionInfo | boolean;
                             let connectionsToClose: chat_client.XMPPClient[];
                             if (selectedItem.__vschatConn) {
                                 result = selectedItem.__vschatConn.connection;

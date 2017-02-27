@@ -52,6 +52,36 @@ export interface Client extends vscode.Disposable {
      * Gets the underlying connection object.
      */
     readonly client: any;
+    /**
+     * Gets information about the connection.
+     */
+    readonly connection: ClientConnectionInfo;
+}
+
+/**
+ * Information about al client connection.
+ */
+export interface ClientConnectionInfo {
+    /**
+     * Domain
+     */
+    domain: string;
+    /**
+     * Host
+     */
+    host: string;
+    /**
+     * ID of the connection.
+     */
+    id: number;
+    /**
+     * TCP port.
+     */
+    port: number;
+    /**
+     * User
+     */
+    user: string;
 }
 
 /**
@@ -149,6 +179,10 @@ export interface PackageFile {
  */
 export interface Server extends vscode.Disposable {
     /**
+     * Gets information about the connection.
+     */
+    readonly connection: ServerConnectionInfo;
+    /**
      * Returns the connections of this servers with clients.
      */
     readonly getClientConnections: () => ClientServerConnection[];
@@ -156,6 +190,20 @@ export interface Server extends vscode.Disposable {
      * Gets the underlying connection object.
      */
     readonly server: any;
+}
+
+/**
+ * Information about al client connection.
+ */
+export interface ServerConnectionInfo {
+    /**
+     * Domain
+     */
+    domain: string;
+    /**
+     * TCP port.
+     */
+    port: number;
 }
 
 /**
@@ -178,4 +226,16 @@ export interface Stanza {
      * The parent.
      */
     parent?: Stanza;
+}
+
+/**
+ * A module for handling a stanza.
+ */
+export interface StanzaModule<TContext> {
+    /**
+     * Handles a stanza.
+     * 
+     * @param {StanzaContext} ctx The context.
+     */
+    readonly handle: (ctx: TContext) => void;
 }

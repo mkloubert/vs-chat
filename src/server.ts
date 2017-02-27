@@ -66,18 +66,6 @@ export interface StanzaContext {
     readonly stanza: chat_contracts.Stanza;
 }
 
-/**
- * A module for handling a stanza.
- */
-export interface StanzaModule {
-    /**
-     * Handles a stanza.
-     * 
-     * @param {StanzaContext} ctx The context.
-     */
-    readonly handle: (ctx: StanzaContext) => void;
-}
-
 
 /**
  * A connection to a client.
@@ -134,6 +122,7 @@ export class ClientConnection implements chat_contracts.ClientServerConnection {
  * A XMPP server.
  */
 export class XMPPServer extends chat_objects.StanzaHandlerBase implements chat_contracts.Server {
+    protected _conn: chat_contracts.ServerConnectionInfo;
     /**
      * Stores the current client connections.
      */
@@ -162,6 +151,11 @@ export class XMPPServer extends chat_objects.StanzaHandlerBase implements chat_c
         this._CONTROLLER = controller;
     }
 
+    /** @inheritdoc */
+    public get connection(): chat_contracts.ServerConnectionInfo {
+        return this._conn;
+    }
+
     /**
      * Gets the underlying controller.
      */
@@ -183,22 +177,22 @@ export class XMPPServer extends chat_objects.StanzaHandlerBase implements chat_c
 
     /** @inheritdoc */
     protected handleStanza(ctx: StanzaContext) {
-        let stanzaMod: StanzaModule;
+        let stanzaModule: chat_contracts.StanzaModule<StanzaContext>;
 
         try {
             let name = chat_helpers.normalizeString(ctx.stanza.name);
             if (name) {
                 if (/[\w|_|-]*/i.test(name)) {
-                    stanzaMod = require('./stanza/server/' + name);
+                    stanzaModule = require('./stanza/server/' + name);
                 }
             }
         }
         catch (e) {
-            // ignore
+            // not found
         }
 
-        if (stanzaMod) {
-            stanzaMod.handle(ctx);
+        if (stanzaModule) {
+            stanzaModule.handle(ctx);
         }
         else {
             ctx.client.client.connection.error('unsupported-stanza-type', 'Stanza not supported!');
@@ -351,6 +345,11 @@ export class XMPPServer extends chat_objects.StanzaHandlerBase implements chat_c
                         me._connections = [];
                         me._server = newServer;
 
+                        me._conn = {
+                            domain: domain,
+                            port: port,
+                        };
+
                         me.emit('started');
 
                         completed(null, true);
@@ -429,6 +428,7 @@ export class XMPPServer extends chat_objects.StanzaHandlerBase implements chat_c
             oldServer.server.stop();
             oldServer.server.close();
 
+            me._conn = null;
             me._connections = null;
             me._server = null;
 
