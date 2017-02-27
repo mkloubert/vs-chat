@@ -32,6 +32,8 @@ import * as vscode from 'vscode';
 const XMPP = require('node-xmpp-server');
 
 
+let nextClientConnectionId = Number.MIN_SAFE_INTEGER;
+
 /**
  * Options for starting a server.
  */
@@ -46,23 +48,59 @@ export interface ServerOptions {
     port?: number;
 }
 
+/**
+ * A stanza context.
+ */
+export interface StanzaContext {
+    /**
+     * Gets the client connection.
+     */
+    readonly client: chat_contracts.ClientServerConnection;
+    /**
+     * Gets the underlying server.
+     */
+    readonly server: chat_contracts.Server;
+    /**
+     * Gets the stanza.
+     */
+    readonly stanza: chat_contracts.Stanza;
+}
+
+/**
+ * A module for handling a stanza.
+ */
+export interface StanzaModule {
+    /**
+     * Handles a stanza.
+     * 
+     * @param {StanzaContext} ctx The context.
+     */
+    readonly handle: (ctx: StanzaContext) => void;
+}
+
 
 /**
  * A connection to a client.
  */
-export class ClientConnection implements vscode.Disposable {
+export class ClientConnection implements chat_contracts.ClientServerConnection {
     /**
      * Stores the underlying client object.
      */
     protected readonly _CLIENT: any;
+    /**
+     * Stores the ID of the connection.
+     */
+    protected readonly _ID: number;
     
     /**
      * Initializes a new instance of that class.
      * 
      * @param {any} client The underlying client object.
+     * @param {number} id The ID of the connection.
      */
-    constructor(client: any) {
+    constructor(client: any, id: number) {
         this._CLIENT = client;
+        this._ID = id;
     }
 
     /**
@@ -83,12 +121,19 @@ export class ClientConnection implements vscode.Disposable {
     public dispose() {
         this.close();
     }
+
+    /**
+     * Gets the ID of the connection.
+     */
+    public get id(): number {
+        return this._ID;
+    }
 }
 
 /**
  * A XMPP server.
  */
-export class XMPPServer extends chat_objects.StanzaHandlerBase {
+export class XMPPServer extends chat_objects.StanzaHandlerBase implements chat_contracts.Server {
     /**
      * Stores the current client connections.
      */
@@ -129,6 +174,40 @@ export class XMPPServer extends chat_objects.StanzaHandlerBase {
         this.stopSync();
 
         super.dispose();
+    }
+
+    /** @inheritdoc */
+    public getClientConnections(): chat_contracts.ClientServerConnection[] {
+        return this._connections.filter(x => x);
+    }
+
+    /** @inheritdoc */
+    protected handleStanza(ctx: StanzaContext) {
+        let stanzaMod: StanzaModule;
+
+        try {
+            let name = chat_helpers.normalizeString(ctx.stanza.name);
+            if (name) {
+                if (/[\w|_|-]*/i.test(name)) {
+                    stanzaMod = require('./stanza/server/' + name);
+                }
+            }
+        }
+        catch (e) {
+            // ignore
+        }
+
+        if (stanzaMod) {
+            stanzaMod.handle(ctx);
+        }
+        else {
+            ctx.client.client.connection.error('unsupported-stanza-type', 'Stanza not supported!');
+        }
+    }
+
+    /** @inheritdoc */
+    public get server(): any {
+        return this._server;
     }
 
     /**
@@ -176,7 +255,8 @@ export class XMPPServer extends chat_objects.StanzaHandlerBase {
                             return;
                         }
 
-                        let conn = new ClientConnection(client);
+                        let conn = new ClientConnection(client,
+                                                        nextClientConnectionId++);
 
                         client.on('register', function (opts, cb) {
                             try {
@@ -189,7 +269,7 @@ export class XMPPServer extends chat_objects.StanzaHandlerBase {
 
                         client.on('authenticate', function (opts, cb) {
                             try {
-                                if (opts.password === 'secret') {
+                                if (opts.password === 'secret') {  //TODO
                                     cb(null, opts);
                                 }
                                 else {
@@ -213,6 +293,12 @@ export class XMPPServer extends chat_objects.StanzaHandlerBase {
                         client.on('stanza', function (stanza) {
                             try {
                                 me.emitStanza(stanza);
+
+                                me.handleStanza({
+                                    client: conn,
+                                    server: me,
+                                    stanza: stanza,
+                                });
                             }
                             catch (e) {
                                 me.controller.log(`[ERROR] XMPPServer.start().stanza: ${chat_helpers.toStringSafe(e)}`);
@@ -225,6 +311,17 @@ export class XMPPServer extends chat_objects.StanzaHandlerBase {
                             }
                             catch (e) {
                                 me.controller.log(`[ERROR] XMPPServer.start().close: ${chat_helpers.toStringSafe(e)}`);
+                            }
+                            finally {
+                                // remove from connection list
+                                let connectionList = me._connections;
+                                if (connectionList) {
+                                    for (let i = 0; i < connectionList.length; i++) {
+                                        if (connectionList[i].id === conn.id) {
+                                            connectionList.splice(i, 1);
+                                        }
+                                    }
+                                }
                             }
                         });
 

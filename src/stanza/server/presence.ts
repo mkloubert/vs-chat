@@ -23,43 +23,23 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-import * as chat_contracts from './contracts';
-import * as chat_helpers from './helpers';
-import * as Events from 'events';
-import * as vscode from 'vscode';
+import * as chat_helpers from '../../helpers';
+import * as chat_server from '../../server';
+const XMPP = require('node-xmpp-server');
 
 
-/**
- * Base object for handling stanzas.
- */
-export abstract class StanzaHandlerBase extends Events.EventEmitter implements vscode.Disposable {
-    /** @inheritdoc */
-    public dispose() {
-        this.removeAllListeners();
+export function handle(ctx: chat_server.StanzaContext) {
+    let from = ctx.stanza.attrs['from'];
+    let to = ctx.stanza.attrs['to'];
 
-        this.emit('disposed');
-    }
+    let child = ctx.stanza.children[0];
 
-    /**
-     * Emits a stanza event.
-     * 
-     * @param {chat_contracts.Stanza} The stanza.
-     * 
-     * @return {boolean} Event has been emitted or not.
-     */
-    protected emitStanza(stanza: chat_contracts.Stanza): boolean {
-        if (!stanza) {
-            return null;
-        }
+    let xmlns = child.attrs['xmlns'];
 
-        return this.emit('stanza',
-                         stanza);
-    }
+    let response = new XMPP.Stanza('presence', { 'from': to,
+                                                 'to': from });
 
-    /**
-     * Handles a stanza.
-     * 
-     * @param {any} ctx The context.
-     */
-    protected abstract handleStanza(ctx: any);
+    let delay = response.c('delay', { xmlns: xmlns });
+
+    ctx.client.client.send(response);
 }

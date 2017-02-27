@@ -33,7 +33,7 @@ import * as vscode from 'vscode';
 const XMPP = require('node-xmpp-server');
 
 
-let nextConnectionId = -1;
+let nextConnectionId = Number.MIN_SAFE_INTEGER;
 
 /**
  * Connection data.
@@ -88,9 +88,23 @@ export interface ConnectionOptions {
 }
 
 /**
+ * A stanza context.
+ */
+export interface StanzaContext {
+    /**
+     * Gets the underlying client.
+     */
+    readonly client: XMPPClient;
+    /**
+     * Gets the underlying stanza.
+     */
+    readonly stanza: Client.Stanza;
+}
+
+/**
  * A XMPP client.
  */
-export class XMPPClient extends chat_objects.StanzaHandlerBase {
+export class XMPPClient extends chat_objects.StanzaHandlerBase implements chat_contracts.Client {
     /**
      * Stores the current client connection.
      */
@@ -117,6 +131,11 @@ export class XMPPClient extends chat_objects.StanzaHandlerBase {
         super();
         
         this._CONTROLLER = controller;
+    }
+
+    /** @inheritdoc */
+    public get client(): any {
+        return this._client;
     }
 
     /**
@@ -227,7 +246,7 @@ export class XMPPClient extends chat_objects.StanzaHandlerBase {
                         me._connection = {
                             domain: domain,
                             host: host,
-                            id: ++nextConnectionId,
+                            id: nextConnectionId++,
                             port: port,
                             user: user,
                         };
@@ -242,6 +261,11 @@ export class XMPPClient extends chat_objects.StanzaHandlerBase {
                 newClient.on('stanza', function (stanza: Client.Stanza) {
                     try {
                         me.emitStanza(stanza);
+
+                        me.handleStanza({
+                            client: me,
+                            stanza: stanza,
+                        });
                     }
                     catch (e) {
                         me.controller.log(`[ERROR] XMPPClient.connect().stanza: ${chat_helpers.toStringSafe(e)}`);
@@ -307,6 +331,11 @@ export class XMPPClient extends chat_objects.StanzaHandlerBase {
         this.closeSync();
 
         super.dispose();
+    }
+
+    /** @inheritdoc */
+    protected handleStanza(ctx: StanzaContext) {
+
     }
 
     /**

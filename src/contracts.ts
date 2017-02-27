@@ -23,6 +23,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+import * as vscode from 'vscode';
+
+
 /**
  * The default TCP port for an un-secure connection.
  */
@@ -40,6 +43,30 @@ export const MEMENTO_LAST_HOST = 'vschatLastHost';
  */
 export const MEMENTO_LAST_PORT = 'vschatLastPort';
 
+
+/**
+ * A client.
+ */
+export interface Client extends vscode.Disposable {
+    /**
+     * Gets the underlying connection object.
+     */
+    readonly client: any;
+}
+
+/**
+ * A connection of a server with a client.
+ */
+export interface ClientServerConnection extends vscode.Disposable {
+    /**
+     * Gets the underlying connection object.
+     */
+    readonly client: any;
+    /**
+     * Gets the ID of the connection.
+     */
+    readonly id: number;
+}
 
 /**
  * The extension settings.
@@ -118,11 +145,37 @@ export interface PackageFile {
 }
 
 /**
+ * A server.
+ */
+export interface Server extends vscode.Disposable {
+    /**
+     * Returns the connections of this servers with clients.
+     */
+    readonly getClientConnections: () => ClientServerConnection[];
+    /**
+     * Gets the underlying connection object.
+     */
+    readonly server: any;
+}
+
+/**
  * A stanza.
  */
 export interface Stanza {
-    from: string;
-    to: string;
-    id: string;
-    type: string;
+    /**
+     * The list of attributs.
+     */
+    attrs?: { [ key: string ]: string };
+    /**
+     * The children.
+     */
+    children?: Stanza[];
+    /**
+     * The name.
+     */
+    name?: string;
+    /**
+     * The parent.
+     */
+    parent?: Stanza;
 }
